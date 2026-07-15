@@ -103,3 +103,17 @@ Tauri app with split frontend/backend communicating via `invoke` (JSON-RPC).
 - Auto-sync interval configurable (default 300s, not yet wired to a timer in frontend)
 - Proxy matching is local-only: compares host:port from MKVN proxy lists against browser profile proxy settings
 - No authentication, no multi-user, no cloud sync
+
+## Release Workflow
+
+When user asks to deploy/release/bump version, follow the workflow in `skills/mkvn-proxy-deploy/SKILL.md`. It covers the full pipeline: bump version in all files → update CHANGELOG → commit → tag → push → verify CI release.
+
+### Version files
+- `package.json` — `"version": "<current>"`
+- `package-lock.json` — `"version": "<current>"` (2×)
+- `src-tauri/Cargo.toml` — `version = "<current>"`
+- `src-tauri/tauri.conf.json` — `"version": "<current>"`
+- `CHANGELOG.md` — `## [v<current>]`
+
+### CI release
+`.github/workflows/release.yml` auto-creates GitHub release when tag `v*` is pushed (builds MSI/EXE/DMG/AppImage for all platforms). Do NOT create release locally — push tag and let CI handle it.
