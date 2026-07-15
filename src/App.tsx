@@ -35,6 +35,16 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    if (settings?.auto_check_update) {
+      commands.checkForUpdates().then((info) => {
+        if (info.update_available) {
+          msg.info(`Update ${info.new_version} available! Open Settings > Update to view.`);
+        }
+      }).catch(() => {});
+    }
+  }, [settings?.auto_check_update]);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() === 'r') { event.preventDefault(); sync.triggerSync(); }
       if (event.ctrlKey && event.key.toLowerCase() === 'b') { event.preventDefault(); setBuyOpen(true); }

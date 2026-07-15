@@ -9,6 +9,7 @@ pub mod models;
 pub mod services;
 pub mod state;
 pub mod sync;
+pub mod updater;
 
 use std::path::PathBuf;
 
@@ -23,6 +24,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_single_instance::init(
+            |app_handle, args, _cwd| {
+                tracing::info!("Single instance triggered with args: {args:?}");
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.unminimize();
+                }
+            },
+        ))
         .setup(|app| {
             setup_logging(app.handle());
             let db_path = app
@@ -48,10 +59,22 @@ pub fn run() {
             get_products,
             get_balance,
             get_settings,
-            save_settings
+            save_settings,
+            check_for_updates,
+            get_app_version
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                if let Some(window) = _app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.unminimize();
+                }
+            }
+        });
 }
 
 fn setup_logging(app: &tauri::AppHandle) {

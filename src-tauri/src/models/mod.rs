@@ -5,6 +5,7 @@ pub mod profile;
 pub mod proxy_row;
 pub mod settings;
 pub mod sync;
+pub mod update;
 
 pub use group::UnifiedGroup;
 pub use order::{MkvnOrder, ProxyDetail};
@@ -13,3 +14,4 @@ pub use profile::UnifiedProfile;
 pub use proxy_row::ProxyRow;
 pub use settings::AppSettings;
 pub use sync::{ManagerSyncResult, SyncProgress, SyncResult};
+pub use update::AppUpdateInfo;

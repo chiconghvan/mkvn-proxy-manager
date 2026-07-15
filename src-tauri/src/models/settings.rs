@@ -25,6 +25,8 @@ pub struct AppSettings {
     pub theme: String,
     #[serde(default)]
     pub column_widths: HashMap<String, f64>,
+    #[serde(default = "return_true")]
+    pub auto_check_update: bool,
 }
 
 fn return_true() -> bool { true }
@@ -44,6 +46,7 @@ impl Default for AppSettings {
             auto_sync_interval_secs: 300,
             theme: "light".to_string(),
             column_widths: HashMap::new(),
+            auto_check_update: true,
         }
     }
 }

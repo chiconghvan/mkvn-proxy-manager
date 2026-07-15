@@ -47,6 +47,17 @@ export interface AppSettings {
   auto_sync_interval_secs: number;
   theme: 'light' | 'dark' | string;
   column_widths?: Record<string, number>;
+  auto_check_update: boolean;
+}
+
+export interface AppUpdateInfo {
+  current_version: string;
+  new_version: string;
+  release_notes: string;
+  download_url: string;
+  published_at: string;
+  release_page_url?: string | null;
+  update_available: boolean;
 }
 
 export interface SyncProgress {

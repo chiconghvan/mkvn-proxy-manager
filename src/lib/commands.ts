@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, Balance, Product, ProxyRow, SyncResult } from '../types';
+import type { AppSettings, AppUpdateInfo, Balance, Product, ProxyRow, SyncResult } from '../types';
 
 export const commands = {
   syncAll: () => invoke<SyncResult>('sync_all'),
@@ -15,4 +15,6 @@ export const commands = {
   getBalance: () => invoke<Balance>('get_balance'),
   getSettings: () => invoke<AppSettings>('get_settings'),
   saveSettings: (settings: AppSettings) => invoke<void>('save_settings', { settings }),
+  checkForUpdates: () => invoke<AppUpdateInfo>('check_for_updates'),
+  getAppVersion: () => invoke<string>('get_app_version'),
 };
