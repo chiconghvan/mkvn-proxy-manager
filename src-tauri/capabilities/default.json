@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default desktop permissions for MKVN Proxy Manager",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:event:allow-listen",
+    "clipboard-manager:default",
+    "dialog:default",
+    "store:default",
+    "fs:default"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "mkvn-proxy-manager",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@ant-design/icons": "latest",
+    "@tauri-apps/api": "latest",
+    "@tauri-apps/plugin-clipboard-manager": "latest",
+    "@tauri-apps/plugin-dialog": "latest",
+    "@tauri-apps/plugin-fs": "latest",
+    "@tauri-apps/plugin-store": "latest",
+    "ag-grid-community": "latest",
+    "ag-grid-react": "latest",
+    "antd": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
