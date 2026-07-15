@@ -78,6 +78,7 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
 
   create-release:
+    if: ${{ !cancelled() }}
     needs: [release]
     runs-on: ubuntu-latest
     permissions:
