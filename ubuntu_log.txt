@@ -1,0 +1,8 @@
+﻿gh : failed to get job: HTTP 404: Not Found 
+(https://api.github.com/repos/chiconghvan/mkvn-proxy-manager/actions/jobs/%3Cguid%3E)
+At line:1 char:1
++ gh run view 29383979684 --job "<guid>" --log 2>&1 | Out-File -FilePat ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (failed to get j...obs/%3Cguid%3E):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

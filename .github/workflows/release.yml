@@ -99,6 +99,12 @@ jobs:
           tag_name: ${{ github.ref_name }}
           body_path: CHANGELOG.md
           files: |
-            **/*
+            deb/**
+            rpm/**
+            appimage/**
+            dmg/**
+            macos/**
+            msi/**
+            nsis/**
           draft: false
           prerelease: false
