@@ -92,26 +92,20 @@ jobs:
           pattern: MKVN-Proxy-Manager-*
           merge-multiple: true
 
-      - name: Collect installer files
-        run: |
-          files=""
-          for dir in deb rpm appimage dmg macos msi nsis; do
-            if [ -d "$dir" ]; then
-              for f in "$dir"/*; do
-                [ -f "$f" ] && cp "$f" . && files="$files $(basename "$f")"
-              done
-            fi
-          done
-          echo "installers=$files" >> $GITHUB_ENV
-
       - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "MKVN Proxy Manager ${{ github.ref_name }}" \
-            --notes-file CHANGELOG.md \
-            --latest \
-            $installers 2>/dev/null || \
-          gh release upload "${{ github.ref_name }}" \
-            $installers --clobber 2>/dev/null || true
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MKVN Proxy Manager ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          files: |
+            **/*.deb
+            **/*.rpm
+            **/*.AppImage
+            **/*.dmg
+            **/*.msi
+            **/*.exe
+            **/*.icns
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
