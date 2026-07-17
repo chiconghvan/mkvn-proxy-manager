@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.2.2] - 2026-07-17
+
+### Added
+
+- Silent update support: `download_update` and `restart_application` Rust commands
+- Auto-download update on startup when auto-check is enabled
+- Update-ready banner with "Restart Now" button in main UI
+- "Download & Install" and "Restart Now" buttons in Settings update tab
+
+### Changed
+
+- Registered new update commands in Tauri invoke handler
+
 ## [v0.2.1] - 2026-07-17
 
 ### Added

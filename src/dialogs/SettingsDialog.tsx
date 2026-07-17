@@ -13,17 +13,22 @@ export function SettingsDialog({ open, onClose, onDone }: Props) {
   const [version, setVersion] = useState('');
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     commands.getSettings().then((settings) => form.setFieldsValue(settings)).catch((err) => message.error(String(err)));
     commands.getAppVersion().then(setVersion).catch(() => {});
     setUpdateInfo(null);
+    setDownloadedPath(null);
   }, [open, form]);
 
   const handleCheckUpdate = async () => {
     setChecking(true);
     setUpdateInfo(null);
+    setDownloadedPath(null);
     try {
       const info = await commands.checkForUpdates();
       setUpdateInfo(info);
@@ -36,6 +41,31 @@ export function SettingsDialog({ open, onClose, onDone }: Props) {
       message.error(String(err));
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!updateInfo?.download_url) return;
+    setDownloading(true);
+    try {
+      const path = await commands.downloadUpdate(updateInfo.download_url);
+      setDownloadedPath(path);
+      message.success('Download complete!');
+    } catch (err) {
+      message.error(String(err));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    if (!downloadedPath) return;
+    setRestarting(true);
+    try {
+      await commands.restartApplication(downloadedPath);
+    } catch (err) {
+      message.error(String(err));
+      setRestarting(false);
     }
   };
 
@@ -95,6 +125,17 @@ export function SettingsDialog({ open, onClose, onDone }: Props) {
                           <a href={updateInfo.release_page_url} target="_blank" rel="noreferrer">View on GitHub</a>
                         </div>
                       )}
+                      <div style={{ marginTop: 12 }}>
+                        {!downloadedPath ? (
+                          <Button type="primary" onClick={handleDownload} loading={downloading} disabled={!updateInfo.download_url}>
+                            {downloading ? 'Downloading...' : 'Download & Install'}
+                          </Button>
+                        ) : (
+                          <Button type="primary" danger onClick={handleRestart} loading={restarting}>
+                            {restarting ? 'Restarting...' : 'Restart Now'}
+                          </Button>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <Text>You are up to date.</Text>

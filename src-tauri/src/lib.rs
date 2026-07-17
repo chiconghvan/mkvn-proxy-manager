@@ -61,7 +61,9 @@ pub fn run() {
             get_settings,
             save_settings,
             check_for_updates,
-            get_app_version
+            get_app_version,
+            download_update,
+            restart_application
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

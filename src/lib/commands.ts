@@ -17,4 +17,6 @@ export const commands = {
   saveSettings: (settings: AppSettings) => invoke<void>('save_settings', { settings }),
   checkForUpdates: () => invoke<AppUpdateInfo>('check_for_updates'),
   getAppVersion: () => invoke<string>('get_app_version'),
+  downloadUpdate: (url: string) => invoke<string>('download_update', { url }),
+  restartApplication: (installerPath: string) => invoke<void>('restart_application', { installerPath }),
 };

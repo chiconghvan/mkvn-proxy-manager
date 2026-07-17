@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, ConfigProvider, theme as antdTheme } from 'antd';
+import { Alert, App as AntApp, Button, ConfigProvider, theme as antdTheme } from 'antd';
 import type { CellContextMenuEvent } from 'ag-grid-community';
 import { commands } from './lib/commands';
 import { Toolbar } from './components/Toolbar';
@@ -13,7 +13,7 @@ import { SettingsDialog } from './dialogs/SettingsDialog';
 import { useSync } from './hooks/useSync';
 import { useSettings } from './hooks/useSettings';
 import { GridDataContext, matchesFilter } from './components/GroupHeader';
-import type { Balance, ProxyRow } from './types';
+import type { AppUpdateInfo, Balance, ProxyRow } from './types';
 
 function AppContent() {
   const sync = useSync();
@@ -28,6 +28,10 @@ function AppContent() {
   const [renewalOpen, setRenewalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateDownloadedPath, setUpdateDownloadedPath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; row: ProxyRow | null }>({ visible: false, x: 0, y: 0, row: null });
   const [contextRenewRow, setContextRenewRow] = useState<ProxyRow | null>(null);
   const theme = settings?.theme ?? 'light';
@@ -51,9 +55,19 @@ function AppContent() {
 
   useEffect(() => {
     if (settings?.auto_check_update) {
-      commands.checkForUpdates().then((info) => {
+      commands.checkForUpdates().then(async (info) => {
         if (info.update_available) {
-          msg.info(`Update ${info.new_version} available! Open Settings > Update to view.`);
+          setUpdateInfo(info);
+          try {
+            setUpdateDownloading(true);
+            const path = await commands.downloadUpdate(info.download_url);
+            setUpdateDownloadedPath(path);
+            setUpdateReady(true);
+          } catch {
+            msg.info(`Update ${info.new_version} available! Open Settings > Update to view.`);
+          } finally {
+            setUpdateDownloading(false);
+          }
         }
       }).catch(() => {});
     }
@@ -77,6 +91,15 @@ function AppContent() {
   const gridContextRef = useRef({}).current;
 
   const renewSelected = () => { setRenewOpen(true); };
+
+  const handleRestartUpdate = async () => {
+    if (!updateDownloadedPath) return;
+    try {
+      await commands.restartApplication(updateDownloadedPath);
+    } catch (err) {
+      msg.error(String(err));
+    }
+  };
 
   const toggleSelectedRenewal = async (enable: boolean) => {
     const codes = Array.from(new Set(selectedRows.map((row) => row.order_code)));
@@ -116,6 +139,22 @@ function AppContent() {
           onToggleRenewal={toggleSelectedRenewal}
           onSettings={() => setSettingsOpen(true)}
         />
+        {updateReady && (
+          <Alert
+            type="success"
+            showIcon
+            message={`Update ${updateInfo?.new_version ?? ''} ready!`}
+            description="Download complete. Restart to install the update."
+            action={
+              <Button size="small" type="primary" danger onClick={handleRestartUpdate}>
+                Restart Now
+              </Button>
+            }
+            closable
+            onClose={() => setUpdateReady(false)}
+            style={{ margin: '0 14px', borderRadius: 8 }}
+          />
+        )}
         <main className="grid-panel">
           <ProxyGrid rows={filteredRows} loading={sync.syncing} search={search} theme={theme} context={gridContextRef} settings={settings} onSelectionChanged={setSelectedRows} onContextMenu={handleContextMenu} />
         </main>
