@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntApp, ConfigProvider, theme as antdTheme } from 'antd';
 import type { CellContextMenuEvent } from 'ag-grid-community';
 import { commands } from './lib/commands';
@@ -12,6 +12,7 @@ import { RenewalToggleDialog } from './dialogs/RenewalToggleDialog';
 import { SettingsDialog } from './dialogs/SettingsDialog';
 import { useSync } from './hooks/useSync';
 import { useSettings } from './hooks/useSettings';
+import { GridDataContext, matchesFilter } from './components/GroupHeader';
 import type { ProxyRow } from './types';
 
 function AppContent() {
@@ -55,18 +56,11 @@ function AppContent() {
   }, [sync.triggerSync]);
 
   const filteredRows = useMemo(() => sync.rows.filter((row) =>
-    (!groupFilter || row.group_name === groupFilter) &&
-    (!managerFilter || row.manager === managerFilter)
+    matchesFilter(row.group_name, groupFilter) &&
+    matchesFilter(row.manager, managerFilter)
   ), [sync.rows, groupFilter, managerFilter]);
 
-  // context object passed to ag-Grid for GroupHeader dropdown callback
-  const gridContext = useMemo(() => ({
-    onGroupFilter: setGroupFilter,
-    onManagerFilter: setManagerFilter,
-    allRows: sync.rows,
-    groupFilter,
-    managerFilter,
-  }), [sync.rows, groupFilter, managerFilter]);
+  const gridContextRef = useRef({}).current;
 
   const renewSelected = () => { setRenewRows(selectedRows); setRenewOpen(true); };
 
@@ -85,22 +79,31 @@ function AppContent() {
     setContextMenu({ visible: true, x: mouse.clientX, y: mouse.clientY, row: event.data ?? null });
   };
 
+  const gridDataValue = useMemo(() => ({
+    allRows: sync.rows,
+    groupFilter,
+    managerFilter,
+    setGroupFilter,
+    setManagerFilter,
+  }), [sync.rows, groupFilter, managerFilter]);
+
   return (
-    <div className="app-shell">
-      <Toolbar
-        syncing={sync.syncing}
-        selectedRows={selectedRows}
-        search={search}
-        onSearchChange={setSearch}
-        onReload={sync.triggerSync}
-        onBuy={() => setBuyOpen(true)}
-        onRenew={renewSelected}
-        onToggleRenewal={toggleSelectedRenewal}
-        onSettings={() => setSettingsOpen(true)}
-      />
-      <main className="grid-panel">
-        <ProxyGrid rows={filteredRows} loading={sync.syncing} search={search} theme={theme} context={gridContext} settings={settings} onSelectionChanged={setSelectedRows} onContextMenu={handleContextMenu} />
-      </main>
+    <GridDataContext.Provider value={gridDataValue}>
+      <div className="app-shell">
+        <Toolbar
+          syncing={sync.syncing}
+          selectedRows={selectedRows}
+          search={search}
+          onSearchChange={setSearch}
+          onReload={sync.triggerSync}
+          onBuy={() => setBuyOpen(true)}
+          onRenew={renewSelected}
+          onToggleRenewal={toggleSelectedRenewal}
+          onSettings={() => setSettingsOpen(true)}
+        />
+        <main className="grid-panel">
+          <ProxyGrid rows={filteredRows} loading={sync.syncing} search={search} theme={theme} context={gridContextRef} settings={settings} onSelectionChanged={setSelectedRows} onContextMenu={handleContextMenu} />
+        </main>
       <StatusBar selectedCount={selectedRows.length} totalCount={filteredRows.length} syncing={sync.syncing} progress={sync.progress} />
       <ContextMenu
         visible={contextMenu.visible} x={contextMenu.x} y={contextMenu.y} row={contextMenu.row}
@@ -112,7 +115,8 @@ function AppContent() {
       <RenewDialog open={renewOpen} rows={renewRows.length ? renewRows : selectedRows} onClose={() => setRenewOpen(false)} onDone={sync.triggerSync} />
       <RenewalToggleDialog open={renewalOpen} rows={selectedRows} onClose={() => setRenewalOpen(false)} onDone={sync.triggerSync} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onDone={reloadSettings} />
-    </div>
+      </div>
+    </GridDataContext.Provider>
   );
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "mkvn-proxy-manager"
-version = "0.1.1"
+version = "0.2.0"
 description = "MKVN Proxy Manager"
 authors = ["MKVN Proxy Manager"]
 edition = "2021"

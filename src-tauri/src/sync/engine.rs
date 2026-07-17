@@ -1,15 +1,16 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use futures::future::join_all;
 use tauri::AppHandle;
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     error::{AppError, AppResult},
     events::{self, DATABASE_UPDATED, SYNC_COMPLETED, SYNC_PROGRESS, SYNC_STARTED},
-    matcher::{MatchResult, ProxyProfileMatcher},
-    models::{ManagerSyncResult, MkvnOrder, SyncProgress, SyncResult},
+    managers::ProfileManager,
+    matcher::{extract_host_port, MatchResult, ProxyProfileMatcher},
+    models::{ManagerSyncResult, MkvnOrder, SyncProgress, SyncResult, UnifiedGroup, UnifiedProfile},
     state::AppState,
 };
 
@@ -20,20 +21,19 @@ impl SyncEngine {
         events::emit(app, SYNC_STARTED, SyncProgress { message: "Starting synchronization".into(), current: 0, total: 100 });
         let mut result = SyncResult::default();
 
-        Self::sync_managers(state, app, &mut result).await;
+        let (profiles, groups) = Self::sync_managers(state, app, &mut result).await;
         Self::sync_orders(state, app, &mut result).await?;
-        Self::match_cached(state, app, &mut result)?;
+        Self::match_cached(state, app, &mut result, &profiles, &groups)?;
 
         events::emit(app, DATABASE_UPDATED, ());
         events::emit(app, SYNC_COMPLETED, result.clone());
         Ok(result)
     }
 
-    async fn sync_managers(state: &AppState, app: &AppHandle, result: &mut SyncResult) {
+    async fn sync_managers(state: &AppState, app: &AppHandle, result: &mut SyncResult) -> (Vec<UnifiedProfile>, Vec<UnifiedGroup>) {
         let managers = state.managers.read().all();
         let total = managers.len().max(1);
         let tasks = managers.into_iter().enumerate().map(|(idx, manager)| {
-            let db = Arc::clone(&state.db);
             let app = app.clone();
             async move {
                 events::emit(&app, SYNC_PROGRESS, SyncProgress {
@@ -42,28 +42,79 @@ impl SyncEngine {
                     total,
                 });
                 let manager_name = manager.display_name().to_string();
-                let groups = manager.load_groups().await;
-                let profiles = manager.load_profiles().await;
-                match (groups, profiles) {
-                    (Ok(groups), Ok(profiles)) => {
-                        if let Err(err) = db.upsert_groups(&groups).and_then(|_| db.upsert_profiles(&profiles)) {
-                            let msg = err.to_string();
-                            error!(manager = %manager_name, error = %msg, "manager cache write failed");
-                            ManagerSyncResult { manager: manager_name, groups: groups.len(), profiles: profiles.len(), error: Some(msg) }
-                        } else {
-                            ManagerSyncResult { manager: manager_name, groups: groups.len(), profiles: profiles.len(), error: None }
-                        }
-                    }
-                    (Err(err), _) | (_, Err(err)) => {
-                        let msg = err.to_string();
-                        warn!(manager = %manager_name, error = %msg, "manager sync failed");
-                        ManagerSyncResult { manager: manager_name, groups: 0, profiles: 0, error: Some(msg) }
+
+                let groups = Self::load_groups_with_retry(&*manager, &manager_name).await;
+                let profiles = Self::load_profiles_with_retry(&*manager, &manager_name).await;
+
+                let groups_ok = groups.as_ref().ok().map(|g| g.len()).unwrap_or(0);
+                let profiles_ok = profiles.as_ref().ok().map(|p| p.len()).unwrap_or(0);
+                let mut errors: Vec<String> = Vec::new();
+
+                if let Err(err) = &groups {
+                    warn!(manager = %manager_name, error = %err, "groups sync failed");
+                    errors.push(err.to_string());
+                }
+                if let Err(err) = &profiles {
+                    warn!(manager = %manager_name, error = %err, "profiles sync failed");
+                    errors.push(err.to_string());
+                }
+
+                let error = if errors.is_empty() { None } else { Some(errors.join("; ")) };
+                let m_result = ManagerSyncResult { manager: manager_name.clone(), groups: groups_ok, profiles: profiles_ok, error };
+
+                let groups = groups.unwrap_or_default();
+                let profiles = profiles.unwrap_or_default();
+
+                let with_host_port = profiles.iter().filter(|p| p.host.is_some() && p.port.is_some()).count();
+                info!(manager = %manager_name, total = profiles.len(), with_host_port, "manager profiles loaded");
+
+                (m_result, profiles, groups)
+            }
+        });
+        let results: Vec<_> = join_all(tasks).await;
+        let mut all_profiles = Vec::new();
+        let mut all_groups = Vec::new();
+        for (m_result, profiles, groups) in results {
+            all_profiles.extend(profiles);
+            all_groups.extend(groups);
+            result.managers.push(m_result);
+        }
+        result.errors.extend(result.managers.iter().filter_map(|m| m.error.clone()));
+        (all_profiles, all_groups)
+    }
+
+    async fn load_groups_with_retry(manager: &dyn ProfileManager, name: &str) -> AppResult<Vec<UnifiedGroup>> {
+        let mut last_err = None;
+        for attempt in 0..3 {
+            match manager.load_groups().await {
+                Ok(groups) => return Ok(groups),
+                Err(err) => {
+                    warn!(manager = %name, attempt, error = %err, "load groups retry");
+                    last_err = Some(err);
+                    if attempt < 2 {
+                        tokio::time::sleep(Duration::from_millis(500 + attempt as u64 * 500)).await;
                     }
                 }
             }
-        });
-        result.managers = join_all(tasks).await;
-        result.errors.extend(result.managers.iter().filter_map(|m| m.error.clone()));
+        }
+        Err(last_err.unwrap())
+    }
+
+    async fn load_profiles_with_retry(manager: &dyn ProfileManager, name: &str) -> AppResult<Vec<UnifiedProfile>> {
+        let mut last_err = None;
+        for attempt in 0..3 {
+            match manager.load_profiles().await {
+                Ok(profiles) => return Ok(profiles),
+                Err(err) => {
+                    warn!(manager = %name, attempt, error = %err, "load profiles retry");
+                    last_err = Some(err);
+                    if attempt < 2 {
+                        tokio::time::sleep(Duration::from_millis(500 + attempt as u64 * 500)).await;
+                    }
+                }
+            }
+        }
+        Err(last_err.unwrap())
     }
 
     async fn sync_orders(state: &AppState, app: &AppHandle, result: &mut SyncResult) -> AppResult<()> {
@@ -80,11 +131,9 @@ impl SyncEngine {
         state.db.delete_expired_orders(&active_codes)?;
         state.db.upsert_orders(&orders)?;
 
-        // Skip orders already cached — chỉ fetch proxy cho orders chưa có trong DB
         let cached_orders = state.db.get_order_codes_with_proxies()?;
         let to_fetch: Vec<MkvnOrder> = orders.into_iter().filter(|o| !cached_orders.contains(&o.code)).collect();
         if to_fetch.is_empty() {
-            // đếm từ DB thay vì API
             result.proxies = state.db.get_stored_proxies()?.len();
             return Ok(());
         }
@@ -130,31 +179,76 @@ impl SyncEngine {
         Ok(())
     }
 
-    fn match_cached(state: &AppState, app: &AppHandle, result: &mut SyncResult) -> AppResult<()> {
+    fn match_cached(state: &AppState, app: &AppHandle, result: &mut SyncResult, profiles: &[UnifiedProfile], groups: &[UnifiedGroup]) -> AppResult<()> {
         events::emit(app, SYNC_PROGRESS, SyncProgress { message: "Matching proxies to profiles".into(), current: 85, total: 100 });
-        let profiles = state.db.get_profiles()?;
-        let groups = state.db.get_groups()?;
+
+        let mut by_manager: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for p in profiles {
+            let has_host = p.host.is_some() && p.port.is_some();
+            *by_manager.entry(&p.manager).or_default() += if has_host { 1 } else { 0 };
+        }
+        for (mgr, cnt) in &by_manager {
+            info!(manager = %mgr, with_host_port = cnt, total = profiles.iter().filter(|p| p.manager == *mgr).count(), "matcher input");
+        }
+
         let proxies = state.db.get_stored_proxies()?;
-        let matcher = ProxyProfileMatcher::build(&profiles, &groups);
+        info!(proxy_count = proxies.len(), "proxies loaded from DB");
+
+        let matcher = ProxyProfileMatcher::build(profiles, groups);
+        info!(matcher_entries = matcher.len(), "matcher built");
+
         let mut matches = Vec::new();
         for proxy in proxies {
             let (Some(host), Some(port)) = (proxy.host, proxy.port) else { continue; };
-            let profile = matcher.match_proxy(&host, port);
-            if profile.is_some() {
-                result.matched += 1;
+
+            // Try matching by stored host:port (domain-based from raw_proxy)
+            let mut profiles = matcher.match_proxy(&host, port);
+            let mut matched_via_ip = false;
+
+            // If no match by domain, try IP-based host:port from raw_proxy_ip
+            if profiles.is_none() {
+                if let Some(ip) = &proxy.raw_proxy_ip {
+                    if let Some((ip_host, ip_port)) = extract_host_port(ip) {
+                        profiles = matcher.match_proxy(&ip_host, ip_port);
+                        matched_via_ip = profiles.is_some();
+                    }
+                }
             }
-            matches.push(MatchResult {
-                proxy_host: host,
-                proxy_port: port,
-                order_code: proxy.order_code,
-                manager: profile.map(|p| p.manager.clone()),
-                profile_id: profile.map(|p| p.profile_id.clone()),
-                profile_name: profile.map(|p| p.profile_name.clone()),
-                group_name: profile.and_then(|p| p.group_name.clone()),
-            });
+
+            if let Some(profile_list) = &profiles {
+                result.matched += 1;
+                for p in profile_list.iter() {
+                    if matched_via_ip {
+                        info!(domain_host = %host, domain_port = port, manager = %p.manager, profile = %p.profile_name, "MATCHED via IP");
+                    } else {
+                        info!(host, port, manager = %p.manager, profile = %p.profile_name, "MATCHED");
+                    }
+                    // Always store domain-based host:port in match_results for JOIN compatibility
+                    matches.push(MatchResult {
+                        proxy_host: host.clone(),
+                        proxy_port: port,
+                        order_code: proxy.order_code.clone(),
+                        manager: Some(p.manager.clone()),
+                        profile_id: Some(p.profile_id.clone()),
+                        profile_name: Some(p.profile_name.clone()),
+                        group_name: p.group_name.clone(),
+                    });
+                }
+            } else {
+                debug!(host, port, "UNMATCHED");
+                matches.push(MatchResult {
+                    proxy_host: host,
+                    proxy_port: port,
+                    order_code: proxy.order_code,
+                    manager: None,
+                    profile_id: None,
+                    profile_name: None,
+                    group_name: None,
+                });
+            }
         }
         state.db.save_match_results(&matches)?;
-        info!(matched = result.matched, "matching completed");
+        info!(matched = result.matched, unmatched = matches.len() - result.matched, "matching completed");
         Ok(())
     }
 }

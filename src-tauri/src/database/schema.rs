@@ -25,34 +25,15 @@ CREATE TABLE IF NOT EXISTS proxies (
   UNIQUE(order_code, raw_proxy)
 );
 
-CREATE TABLE IF NOT EXISTS profiles_cache (
-  id TEXT NOT NULL,
-  manager TEXT NOT NULL,
-  name TEXT,
-  raw_proxy TEXT,
-  host TEXT,
-  port INTEGER,
-  group_id TEXT,
-  updated_at TEXT DEFAULT (datetime('now')),
-  PRIMARY KEY (manager, id)
-);
-
-CREATE TABLE IF NOT EXISTS groups_cache (
-  id TEXT NOT NULL,
-  manager TEXT NOT NULL,
-  name TEXT,
-  PRIMARY KEY (manager, id)
-);
-
-CREATE TABLE IF NOT EXISTS match_results (
+DROP TABLE IF EXISTS match_results;
+CREATE TABLE match_results (
   proxy_host TEXT NOT NULL,
   proxy_port INTEGER NOT NULL,
   order_code TEXT,
   manager TEXT,
   profile_id TEXT,
   profile_name TEXT,
-  group_name TEXT,
-  PRIMARY KEY (proxy_host, proxy_port, order_code)
+  group_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS products_cache (

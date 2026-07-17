@@ -7,13 +7,14 @@ use crate::{
     database::schema::SCHEMA,
     error::AppResult,
     matcher::MatchResult,
-    models::{MkvnOrder, Product, ProxyDetail, ProxyRow, UnifiedGroup, UnifiedProfile},
+    models::{MkvnOrder, Product, ProxyDetail, ProxyRow},
 };
 
 #[derive(Debug, Clone)]
 pub struct StoredProxy {
     pub order_code: String,
     pub raw_proxy: String,
+    pub raw_proxy_ip: Option<String>,
     pub host: Option<String>,
     pub port: Option<u16>,
 }
@@ -153,73 +154,6 @@ impl Database {
         rows.collect::<Result<HashSet<_>, _>>().map_err(Into::into)
     }
 
-    pub fn upsert_profiles(&self, profiles: &[UnifiedProfile]) -> AppResult<()> {
-        let mut conn = self.conn.lock();
-        let tx = conn.transaction()?;
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO profiles_cache (id, manager, name, raw_proxy, host, port, group_id, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
-                 ON CONFLICT(manager, id) DO UPDATE SET
-                   name=excluded.name,
-                   raw_proxy=excluded.raw_proxy,
-                   host=excluded.host,
-                   port=excluded.port,
-                   group_id=excluded.group_id,
-                   updated_at=datetime('now')",
-            )?;
-            for p in profiles {
-                stmt.execute(params![p.id, p.manager, p.name, p.raw_proxy, p.host, p.port.map(|v| v as i64), p.group_id])?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
-    }
-
-    pub fn upsert_groups(&self, groups: &[UnifiedGroup]) -> AppResult<()> {
-        let mut conn = self.conn.lock();
-        let tx = conn.transaction()?;
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO groups_cache (id, manager, name)
-                 VALUES (?1, ?2, ?3)
-                 ON CONFLICT(manager, id) DO UPDATE SET name=excluded.name",
-            )?;
-            for g in groups {
-                stmt.execute(params![g.id, g.manager, g.name])?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
-    }
-
-    pub fn get_profiles(&self) -> AppResult<Vec<UnifiedProfile>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT id, manager, name, raw_proxy, host, port, group_id FROM profiles_cache")?;
-        let rows = stmt.query_map([], |row| {
-            let port: Option<i64> = row.get(5)?;
-            Ok(UnifiedProfile {
-                id: row.get(0)?,
-                manager: row.get(1)?,
-                name: row.get(2)?,
-                raw_proxy: row.get(3)?,
-                host: row.get(4)?,
-                port: port.map(|p| p as u16),
-                group_id: row.get(6)?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn get_groups(&self) -> AppResult<Vec<UnifiedGroup>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT id, manager, name FROM groups_cache")?;
-        let rows = stmt.query_map([], |row| {
-            Ok(UnifiedGroup { id: row.get(0)?, manager: row.get(1)?, name: row.get(2)? })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
     pub fn get_order_codes_with_proxies(&self) -> AppResult<HashSet<String>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare("SELECT DISTINCT order_code FROM proxies")?;
@@ -229,13 +163,14 @@ impl Database {
 
     pub fn get_stored_proxies(&self) -> AppResult<Vec<StoredProxy>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT order_code, raw_proxy, host, port FROM proxies")?;
+        let mut stmt = conn.prepare("SELECT order_code, raw_proxy, raw_proxy_ip, host, port FROM proxies")?;
         let rows = stmt.query_map([], |row| {
-            let port: Option<i64> = row.get(3)?;
+            let port: Option<i64> = row.get(4)?;
             Ok(StoredProxy {
                 order_code: row.get(0)?,
                 raw_proxy: row.get(1)?,
-                host: row.get(2)?,
+                raw_proxy_ip: row.get(2)?,
+                host: row.get(3)?,
                 port: port.map(|p| p as u16),
             })
         })?;
@@ -264,11 +199,15 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT
                 o.code, p.raw_proxy, p.raw_proxy_ip, o.proxy_type,
-                m.profile_id, m.profile_name, m.group_name, m.manager,
+                GROUP_CONCAT(m.profile_id, ' | '),
+                GROUP_CONCAT(m.profile_name, ' | '),
+                GROUP_CONCAT(m.group_name, ' | '),
+                GROUP_CONCAT(m.manager, ' | '),
                 o.time_buy, o.time_con_lai, o.renewal, o.note, o.price
              FROM proxies p
              JOIN orders o ON o.code = p.order_code
              LEFT JOIN match_results m ON m.order_code = p.order_code AND m.proxy_host = p.host AND m.proxy_port = p.port
+             GROUP BY p.order_code, p.raw_proxy
              ORDER BY o.code, p.raw_proxy",
         )?;
         let rows = stmt.query_map([], |row| {

@@ -1,7 +1,30 @@
-import { useState } from 'react';
+import { createContext, useContext, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { Dropdown } from 'antd';
 import type { IHeaderParams } from 'ag-grid-community';
 import type { ProxyRow } from '../types';
+import { MANAGER_LABEL, mapLabel } from '../lib/gridConfig';
+
+interface GridDataContextValue {
+  allRows: ProxyRow[];
+  groupFilter: string | undefined;
+  managerFilter: string | undefined;
+  setGroupFilter: Dispatch<SetStateAction<string | undefined>>;
+  setManagerFilter: Dispatch<SetStateAction<string | undefined>>;
+}
+
+export const GridDataContext = createContext<GridDataContextValue>({
+  allRows: [],
+  groupFilter: undefined,
+  managerFilter: undefined,
+  setGroupFilter: () => {},
+  setManagerFilter: () => {},
+});
+
+export function matchesFilter(rowValue: string | null | undefined, filterValue: string | undefined): boolean {
+  if (!filterValue) return true;
+  if (!rowValue) return false;
+  return rowValue.split(' | ').includes(filterValue);
+}
 
 function collectItems(
   allRows: ProxyRow[],
@@ -13,19 +36,25 @@ function collectItems(
   const vals = new Set<string>();
   for (const row of allRows) {
     const v = row[field];
-    if (v) vals.add(String(v));
+    if (v) {
+      for (const part of String(v).split(' | ')) {
+        vals.add(part);
+      }
+    }
   }
   const sorted = Array.from(vals).sort();
-  const mapFn = (v: string) => labelMap?.[v] ?? v;
   return [
     { key: '__all__', label: allLabel ?? 'All', checked: !currentFilter },
-    ...sorted.map((v) => ({ key: v, label: mapFn(v), checked: currentFilter === v })),
+    ...sorted.map((v) => ({ key: v, label: mapLabel(v, labelMap ?? {}), checked: currentFilter === v })),
   ];
 }
 
 export function GroupHeader(props: IHeaderParams) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<string | undefined>(() => props.context?.groupFilter as string | undefined);
+  const { allRows, groupFilter, managerFilter, setGroupFilter } = useContext(GridDataContext);
+  const [filter, setFilter] = useState<string | undefined>(() => groupFilter);
+
+  useEffect(() => { setFilter(groupFilter); }, [groupFilter]);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -34,7 +63,7 @@ export function GroupHeader(props: IHeaderParams) {
   const handleSelect = ({ key }: { key: string }) => {
     const next = key === '__all__' ? undefined : (key === filter ? undefined : key);
     setFilter(next);
-    props.context?.onGroupFilter?.(next);
+    setGroupFilter(next);
     setOpen(false);
   };
 
@@ -44,8 +73,8 @@ export function GroupHeader(props: IHeaderParams) {
     props.progressSort(e.shiftKey);
   };
 
-  const allRows: ProxyRow[] = props.context?.allRows ?? [];
-  const items = collectItems(allRows, 'group_name', filter, undefined, 'All Groups');
+  const filteredForGroup = managerFilter ? allRows.filter((r) => matchesFilter(r.manager, managerFilter)) : allRows;
+  const items = collectItems(filteredForGroup, 'group_name', filter, undefined, 'All Groups');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: 4 }}>
@@ -87,15 +116,12 @@ export function GroupHeader(props: IHeaderParams) {
   );
 }
 
-const MANAGER_LABEL: Record<string, string> = {
-  gpm_standard: 'GPM Standard',
-  gpm_global: 'GPM Global',
-  donut: 'Donut Browser',
-};
-
 export function ManagerHeader(props: IHeaderParams) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<string | undefined>(() => props.context?.managerFilter as string | undefined);
+  const { allRows, groupFilter, managerFilter, setManagerFilter } = useContext(GridDataContext);
+  const [filter, setFilter] = useState<string | undefined>(() => managerFilter);
+
+  useEffect(() => { setFilter(managerFilter); }, [managerFilter]);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -104,7 +130,7 @@ export function ManagerHeader(props: IHeaderParams) {
   const handleSelect = ({ key }: { key: string }) => {
     const next = key === '__all__' ? undefined : (key === filter ? undefined : key);
     setFilter(next);
-    props.context?.onManagerFilter?.(next);
+    setManagerFilter(next);
     setOpen(false);
   };
 
@@ -114,8 +140,8 @@ export function ManagerHeader(props: IHeaderParams) {
     props.progressSort(e.shiftKey);
   };
 
-  const allRows: ProxyRow[] = props.context?.allRows ?? [];
-  const items = collectItems(allRows, 'manager', filter, MANAGER_LABEL, 'All Managers');
+  const filteredForManager = groupFilter ? allRows.filter((r) => matchesFilter(r.group_name, groupFilter)) : allRows;
+  const items = collectItems(filteredForManager, 'manager', filter, MANAGER_LABEL, 'All Managers');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: 4 }}>

@@ -56,8 +56,12 @@ impl ProxyProfileMatcher {
         Self { map }
     }
 
-    pub fn match_proxy(&self, host: &str, port: u16) -> Option<&ProfileMatch> {
+    pub fn match_proxy(&self, host: &str, port: u16) -> Option<&Vec<ProfileMatch>> {
         let key = format!("{}:{}", host.to_ascii_lowercase(), port);
-        self.map.get(&key).and_then(|items| items.first())
+        self.map.get(&key)
+    }
+
+    pub fn len(&self) -> usize {
+        self.map.len()
     }
 }

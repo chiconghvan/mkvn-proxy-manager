@@ -55,19 +55,19 @@ impl AppState {
         *self.mkvn.write() = mkvn;
 
         let mut registry = ManagerRegistry::new();
-        if settings.gpm_standard_enabled {
+        if settings.gpm_standard_enabled && !settings.gpm_standard_url.trim().is_empty() {
             registry.register(Arc::new(GpmStandardManager::new(GpmStandardClient::new(
                 self.http.clone(),
                 settings.gpm_standard_url.clone(),
             ))));
         }
-        if settings.gpm_global_enabled {
+        if settings.gpm_global_enabled && !settings.gpm_global_url.trim().is_empty() {
             registry.register(Arc::new(GpmGlobalManager::new(GpmGlobalClient::new(
                 self.http.clone(),
                 settings.gpm_global_url.clone(),
             ))));
         }
-        if settings.donut_enabled {
+        if settings.donut_enabled && !settings.donut_url.trim().is_empty() {
             registry.register(Arc::new(DonutManager::new(DonutClient::new(
                 self.http.clone(),
                 settings.donut_url.clone(),
