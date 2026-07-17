@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 use futures::future::join_all;
 use tauri::AppHandle;
 use tokio::sync::Semaphore;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::{
     error::{AppError, AppResult},
@@ -66,7 +66,7 @@ impl SyncEngine {
                 let profiles = profiles.unwrap_or_default();
 
                 let with_host_port = profiles.iter().filter(|p| p.host.is_some() && p.port.is_some()).count();
-                info!(manager = %manager_name, total = profiles.len(), with_host_port, "manager profiles loaded");
+                info!(manager = %manager_name, profiles = profiles.len(), with_host_port, "manager loaded");
 
                 (m_result, profiles, groups)
             }
@@ -182,20 +182,9 @@ impl SyncEngine {
     fn match_cached(state: &AppState, app: &AppHandle, result: &mut SyncResult, profiles: &[UnifiedProfile], groups: &[UnifiedGroup]) -> AppResult<()> {
         events::emit(app, SYNC_PROGRESS, SyncProgress { message: "Matching proxies to profiles".into(), current: 85, total: 100 });
 
-        let mut by_manager: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-        for p in profiles {
-            let has_host = p.host.is_some() && p.port.is_some();
-            *by_manager.entry(&p.manager).or_default() += if has_host { 1 } else { 0 };
-        }
-        for (mgr, cnt) in &by_manager {
-            info!(manager = %mgr, with_host_port = cnt, total = profiles.iter().filter(|p| p.manager == *mgr).count(), "matcher input");
-        }
-
         let proxies = state.db.get_stored_proxies()?;
-        info!(proxy_count = proxies.len(), "proxies loaded from DB");
 
         let matcher = ProxyProfileMatcher::build(profiles, groups);
-        info!(matcher_entries = matcher.len(), "matcher built");
 
         let mut matches = Vec::new();
         for proxy in proxies {
@@ -203,14 +192,12 @@ impl SyncEngine {
 
             // Try matching by stored host:port (domain-based from raw_proxy)
             let mut profiles = matcher.match_proxy(&host, port);
-            let mut matched_via_ip = false;
 
             // If no match by domain, try IP-based host:port from raw_proxy_ip
             if profiles.is_none() {
                 if let Some(ip) = &proxy.raw_proxy_ip {
                     if let Some((ip_host, ip_port)) = extract_host_port(ip) {
                         profiles = matcher.match_proxy(&ip_host, ip_port);
-                        matched_via_ip = profiles.is_some();
                     }
                 }
             }
@@ -218,11 +205,6 @@ impl SyncEngine {
             if let Some(profile_list) = &profiles {
                 result.matched += 1;
                 for p in profile_list.iter() {
-                    if matched_via_ip {
-                        info!(domain_host = %host, domain_port = port, manager = %p.manager, profile = %p.profile_name, "MATCHED via IP");
-                    } else {
-                        info!(host, port, manager = %p.manager, profile = %p.profile_name, "MATCHED");
-                    }
                     // Always store domain-based host:port in match_results for JOIN compatibility
                     matches.push(MatchResult {
                         proxy_host: host.clone(),
@@ -235,7 +217,6 @@ impl SyncEngine {
                     });
                 }
             } else {
-                debug!(host, port, "UNMATCHED");
                 matches.push(MatchResult {
                     proxy_host: host,
                     proxy_port: port,
@@ -248,7 +229,16 @@ impl SyncEngine {
             }
         }
         state.db.save_match_results(&matches)?;
-        info!(matched = result.matched, unmatched = matches.len() - result.matched, "matching completed");
+
+        let mut matched_by_mgr: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for m in &matches {
+            if let Some(mgr) = &m.manager {
+                *matched_by_mgr.entry(mgr.as_str()).or_default() += 1;
+            }
+        }
+        let mut mgr_summary: Vec<String> = matched_by_mgr.iter().map(|(m, c)| format!("{}: {}", m, c)).collect();
+        mgr_summary.sort();
+        info!(matched = result.matched, unmatched = matches.len() - result.matched, managers = mgr_summary.join(", "), "matching completed");
         Ok(())
     }
 }

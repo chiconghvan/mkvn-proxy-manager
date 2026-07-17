@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm *)",
+      "PowerShell($dirs = @\\('src','src\\\\components','src\\\\dialogs','src\\\\hooks','src\\\\lib','src\\\\styles','src\\\\types','src-tauri','src-tauri\\\\src','src-tauri\\\\src\\\\api','src-tauri\\\\src\\\\commands','src-tauri\\\\src\\\\database','src-tauri\\\\src\\\\managers','src-tauri\\\\src\\\\matcher','src-tauri\\\\src\\\\models','src-tauri\\\\src\\\\services','src-tauri\\\\src\\\\sync','src-tauri\\\\icons'\\); foreach \\($d in $dirs\\) { New-Item -ItemType Directory -Force $d | Out-Null })",
+      "PowerShell(npm install *)",
+      "PowerShell(cargo check *)",
+      "PowerShell(npm run *)",
+      "PowerShell(cargo test *)",
+      "Bash(cargo check *)",
+      "Bash(npx tsc *)",
+      "Bash(find . -maxdepth 3 -not -path '*/\\\\.*' -not -path '*/node_modules/*' -not -path '*/target/*' -not -path '*/build/*' -not -path '*/dist/*')"
+    ]
+  }
+}

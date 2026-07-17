@@ -1,9 +1,10 @@
 import { Button, Input, Space, Tooltip } from 'antd';
 import { CopyOutlined, ReloadOutlined, SettingOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import { message } from 'antd';
-import type { ProxyRow } from '../types';
+import type { Balance, ProxyRow } from '../types';
 
 interface Props {
+  balance: Balance | null;
   syncing: boolean;
   selectedRows: ProxyRow[];
   search: string;
@@ -41,7 +42,17 @@ export function Toolbar(props: Props) {
         <Tooltip title="Disable auto renewal"><Button size="small" disabled={!hasSelection} onClick={() => props.onToggleRenewal(false)}>Ren OFF</Button></Tooltip>
         <Button size="small" icon={<SettingOutlined />} onClick={props.onSettings} />
       </Space>
-      <Input.Search placeholder="Search..." value={props.search} onChange={(e) => props.onSearchChange(e.target.value)} allowClear className="toolbar-search" />
+      <div className="toolbar-right">
+        <Input.Search placeholder="Search..." value={props.search} onChange={(e) => props.onSearchChange(e.target.value)} allowClear className="toolbar-search" />
+        <div className="balance-card">
+          <span className="balance-label">Balance</span>
+          <span className="balance-value">
+            {props.balance
+              ? `${props.balance.balance.toLocaleString()} ₫`
+              : '---'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -54,6 +54,19 @@ struct BuyResponse {
     proxiesip: Option<Vec<String>>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RenewPlusResponse {
+    status: String,
+    #[serde(rename = "statusCode")]
+    #[allow(dead_code)]
+    status_code: Option<i64>,
+    message: Option<String>,
+    #[allow(dead_code)]
+    order_code: Option<String>,
+    #[allow(dead_code)]
+    remaining_balance: Option<f64>,
+}
+
 impl MkvnClient {
     pub fn new(http: Client, base_url: String, token: String, limiter: Arc<RateLimiter>) -> Self {
         Self { http, base_url, token, limiter }
@@ -147,12 +160,16 @@ impl MkvnClient {
     }
 
     pub async fn renew_plus(&self, order_code: &str, months: i64) -> AppResult<()> {
-        let _: serde_json::Value = self
+        let resp: RenewPlusResponse = self
             .request_post(
                 "/renewalplus",
                 &[("ordercode", order_code.to_string()), ("month", months.to_string())],
             )
             .await?;
+        if resp.status != "SUCCESS" {
+            let msg = resp.message.unwrap_or_else(|| "unknown error".to_string());
+            return Err(AppError::Api(format!("Renew failed for {}: {}", order_code, msg)));
+        }
         Ok(())
     }
 

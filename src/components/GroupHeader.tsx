@@ -22,6 +22,7 @@ export const GridDataContext = createContext<GridDataContextValue>({
 
 export function matchesFilter(rowValue: string | null | undefined, filterValue: string | undefined): boolean {
   if (!filterValue) return true;
+  if (filterValue === '__none__') return !rowValue;
   if (!rowValue) return false;
   return rowValue.split(' | ').includes(filterValue);
 }
@@ -34,19 +35,26 @@ function collectItems(
   allLabel?: string,
 ) {
   const vals = new Set<string>();
+  let hasNone = false;
   for (const row of allRows) {
     const v = row[field];
     if (v) {
       for (const part of String(v).split(' | ')) {
         vals.add(part);
       }
+    } else {
+      hasNone = true;
     }
   }
   const sorted = Array.from(vals).sort();
-  return [
+  const items = [
     { key: '__all__', label: allLabel ?? 'All', checked: !currentFilter },
     ...sorted.map((v) => ({ key: v, label: mapLabel(v, labelMap ?? {}), checked: currentFilter === v })),
   ];
+  if (hasNone) {
+    items.push({ key: '__none__', label: '(None)', checked: currentFilter === '__none__' });
+  }
+  return items;
 }
 
 export function GroupHeader(props: IHeaderParams) {

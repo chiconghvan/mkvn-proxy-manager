@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.2.1] - 2026-07-17
+
+### Added
+
+- Balance card in toolbar: displays MKVN account balance with card styling
+- "(None)" filter option in Group and Manager dropdowns for unmatched proxies
+- Renew dialog: progress bar with per-order status and retry logic (3 attempts)
+
+### Changed
+
+- Reduced noise in sync engine logs; removed per-match and per-proxy debug lines
+- Suppressed hyper_util and reqwest crate logs from debug output
+- Moved balance display from inline text to a card on the right side of toolbar
+
+### Fixed
+
+- Renew error handling: parse renewal API response for error messages instead of ignoring them
+- Context menu renew: fixed row reference to use dedicated context row state
+
 ## [v0.2.0] - 2026-07-17
 
 ### Added

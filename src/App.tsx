@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntApp, ConfigProvider, theme as antdTheme } from 'antd';
 import type { CellContextMenuEvent } from 'ag-grid-community';
 import { commands } from './lib/commands';
@@ -13,7 +13,7 @@ import { SettingsDialog } from './dialogs/SettingsDialog';
 import { useSync } from './hooks/useSync';
 import { useSettings } from './hooks/useSettings';
 import { GridDataContext, matchesFilter } from './components/GroupHeader';
-import type { ProxyRow } from './types';
+import type { Balance, ProxyRow } from './types';
 
 function AppContent() {
   const sync = useSync();
@@ -27,13 +27,27 @@ function AppContent() {
   const [renewOpen, setRenewOpen] = useState(false);
   const [renewalOpen, setRenewalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [balance, setBalance] = useState<Balance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; row: ProxyRow | null }>({ visible: false, x: 0, y: 0, row: null });
-  const [renewRows, setRenewRows] = useState<ProxyRow[]>([]);
+  const [contextRenewRow, setContextRenewRow] = useState<ProxyRow | null>(null);
   const theme = settings?.theme ?? 'light';
 
   useEffect(() => {
     sync.loadCachedRows().then(sync.triggerSync).catch((err) => msg.error(String(err)));
   }, []);
+
+  const fetchBalance = useCallback(async () => {
+    try {
+      const b = await commands.getBalance();
+      setBalance(b);
+    } catch { /* token not configured yet */ }
+  }, []);
+
+  useEffect(() => { fetchBalance(); }, [fetchBalance]);
+
+  useEffect(() => {
+    if (sync.rows.length > 0) fetchBalance();
+  }, [sync.rows, fetchBalance]);
 
   useEffect(() => {
     if (settings?.auto_check_update) {
@@ -62,7 +76,7 @@ function AppContent() {
 
   const gridContextRef = useRef({}).current;
 
-  const renewSelected = () => { setRenewRows(selectedRows); setRenewOpen(true); };
+  const renewSelected = () => { setRenewOpen(true); };
 
   const toggleSelectedRenewal = async (enable: boolean) => {
     const codes = Array.from(new Set(selectedRows.map((row) => row.order_code)));
@@ -91,6 +105,7 @@ function AppContent() {
     <GridDataContext.Provider value={gridDataValue}>
       <div className="app-shell">
         <Toolbar
+          balance={balance}
           syncing={sync.syncing}
           selectedRows={selectedRows}
           search={search}
@@ -108,11 +123,11 @@ function AppContent() {
       <ContextMenu
         visible={contextMenu.visible} x={contextMenu.x} y={contextMenu.y} row={contextMenu.row}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0, row: null })}
-        onRenew={(row) => { setRenewRows([row]); setRenewOpen(true); }}
+        onRenew={(row) => { setContextRenewRow(row); setRenewOpen(true); }}
         onToggleRenewal={async (row, enable) => { await commands.toggleRenewal(row.order_code, enable); sync.triggerSync(); }}
       />
       <BuyProxyDialog open={buyOpen} onClose={() => setBuyOpen(false)} onDone={sync.triggerSync} />
-      <RenewDialog open={renewOpen} rows={renewRows.length ? renewRows : selectedRows} onClose={() => setRenewOpen(false)} onDone={sync.triggerSync} />
+      <RenewDialog open={renewOpen} rows={contextRenewRow ? [contextRenewRow] : selectedRows} onClose={() => { setRenewOpen(false); setContextRenewRow(null); }} onDone={sync.triggerSync} />
       <RenewalToggleDialog open={renewalOpen} rows={selectedRows} onClose={() => setRenewalOpen(false)} onDone={sync.triggerSync} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onDone={reloadSettings} />
       </div>

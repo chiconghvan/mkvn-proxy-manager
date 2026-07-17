@@ -31,6 +31,20 @@ button, input, textarea, select { font: inherit; }
 
 [data-theme='dark'] .toolbar-shell { background: #0f172a; border-bottom-color: #263244; }
 .toolbar-search { width: 220px; }
+.toolbar-right { display: flex; align-items: center; gap: 10px; }
+.balance-card {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 12px;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+[data-theme='dark'] .balance-card { background: #064e3b; border-color: #065f46; }
+.balance-label { font-size: 11px; font-weight: 500; color: #047857; text-transform: uppercase; letter-spacing: 0.5px; }
+[data-theme='dark'] .balance-label { color: #6ee7b7; }
+.balance-value { font-size: 14px; font-weight: 700; color: #065f46; }
+[data-theme='dark'] .balance-value { color: #a7f3d0; }
 
 .grid-panel { flex: 1; min-height: 0; padding: 8px 14px; }
 .proxy-grid { height: 100%; width: 100%; border: 1px solid #b9c6d8; border-radius: 8px; overflow: hidden; }
